@@ -21,10 +21,9 @@ use crate::dialog;
 use crate::engine::{self, Shared};
 use crate::ui::*;
 use crate::xinput::{
-    PadState, XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_DPAD_DOWN,
+    PadState, XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_DPAD_DOWN,
     XINPUT_GAMEPAD_DPAD_LEFT, XINPUT_GAMEPAD_DPAD_RIGHT, XINPUT_GAMEPAD_DPAD_UP,
-    XINPUT_GAMEPAD_LEFT_SHOULDER, XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_SHOULDER,
-    XINPUT_GAMEPAD_RIGHT_THUMB, XINPUT_GAMEPAD_START, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
+    XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
 };
 
 const TIMER_ID: usize = 1;
@@ -1026,83 +1025,42 @@ impl GuiState {
         let pad = self.pad;
         let on = |bit: u16| pad.connected && pad.buttons & bit != 0;
 
-        // Корпус: чистый симметричный силуэт с отдельной верхней декой.
-        // Две округлые рукоятки и широкая центральная часть читаются
-        // заметно лучше, чем один монолитный «blob».
-        silhouette(
-            dc,
-            &[
-                // Широкая верхняя дека и две мягко расширяющиеся рукоятки.
-                Shape::Round(rect(54, 46, 406, 218), self.p(54)),
-                Shape::Round(rect(28, 112, 160, 284), self.p(48)),
-                Shape::Round(rect(300, 112, 432, 284), self.p(48)),
-                Shape::Round(rect(78, 174, 382, 246), self.p(28)),
-                Shape::Round(rect(92, 28, 368, 96), self.p(30)),
-            ],
-            PAD_BODY,
-            PAD_EDGE,
-            self.p(3).max(1),
-        );
-        // Центральная «лицевая панель» в форме мягкого щита — характерная
-        // посадка элементов Xbox, без плоской чёрной полосы.
-        rounded(
-            dc,
-            rect(102, 74, 358, 126),
-            self.p(24),
-            PAD_DARK,
-            PAD_CONTROL,
-        );
-        rounded(dc, rect(116, 84, 344, 113), self.p(14), PAD_BODY, PAD_BODY);
-        // Плечевые швы и затемнённая «талия» делают профиль читаемым.
-        rounded(dc, rect(92, 96, 116, 176), self.p(10), PAD_DARK, PAD_DARK);
-        rounded(dc, rect(344, 96, 368, 176), self.p(10), PAD_DARK, PAD_DARK);
-        // Нижняя перемычка корпуса подчёркивает две рукоятки.
-        rounded(dc, rect(100, 184, 360, 222), self.p(18), PAD_BODY, PAD_EDGE);
-
-        // Триггеры: верхние гнёзда с аккуратными индикаторами.
-        for (x1, value, lit) in [
-            (105i32, pad.lt, pad.connected && pad.lt >= 128),
-            (335, pad.rt, pad.connected && pad.rt >= 128),
-        ] {
-            rounded(dc, rect(x1, 18, x1 + 20, 54), self.p(6), PAD_DARK, PAD_EDGE);
-            let fraction = value as f64 / 255.0;
-            let bar_height = (32.0 * fraction) as i32;
-            if bar_height > 1 {
-                rounded(
-                    dc,
-                    rect(x1 + 3, 51 - bar_height, x1 + 17, 51),
-                    self.p(4),
-                    if lit { PAD_LIT } else { BLUE },
-                    if lit { PAD_LIT } else { BLUE },
-                );
-            }
-            self.pad_label(
-                dc,
-                rect(x1 - 4, 2, x1 + 24, 14),
-                if x1 < 200 { "LT" } else { "RT" },
-            );
-        }
-
-        // Бамперы.
-        for (x1, label, pressed) in [
-            (95i32, "LB", on(XINPUT_GAMEPAD_LEFT_SHOULDER)),
-            (285, "RB", on(XINPUT_GAMEPAD_RIGHT_SHOULDER)),
-        ] {
+        // Минималистичная схема органов управления.
+        // LT/RT — сенсорные курки сверху, с живой индикацией нажатия.
+        for (x, value, label) in [(92i32, pad.lt, "LT"), (336i32, pad.rt, "RT")] {
+            let active = pad.connected && value >= 128;
             rounded(
                 dc,
-                rect(x1, 59, x1 + 74, 73),
-                self.p(6),
-                if pressed { PAD_LIT } else { PAD_CONTROL },
+                rect(x, 12, x + 32, 62),
+                self.p(9),
+                if active { PAD_LIT } else { PAD_CONTROL },
                 PAD_EDGE,
             );
-            self.pad_label(dc, rect(x1, 59, x1 + 74, 73), label);
+            let level = ((value as i32 * 42) / 255).clamp(0, 42);
+            if level > 2 {
+                rounded(
+                    dc,
+                    rect(x + 5, 57 - level, x + 27, 57),
+                    self.p(5),
+                    if active { XBOX_GREEN } else { BLUE },
+                    if active { XBOX_GREEN } else { BLUE },
+                );
+            }
+            let mut label_rect = rect(x, 0, x + 32, 12);
+            draw_text(
+                dc,
+                label,
+                &mut label_rect,
+                self.fonts.small,
+                MUTED,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+            );
         }
-
-        // Крестовина — цельный выемчатый крест, как на Switch Pro:
+        // Крестовина — цельный выемчатый крест, как на джойстике:
         // вертикальная и горизонтальная ручки с общим центром.
         let cross_color = PAD_CONTROL;
-        let dpad_cx = 138;
-        let dpad_cy = 170;
+        let dpad_cx = 140;
+        let dpad_cy = 200;
         let arm_w = 18;
         let arm_len = 34;
         let center_r = 8;
@@ -1204,10 +1162,10 @@ impl GuiState {
 
         // Кнопки ABXY в цветах Xbox; при нажатии — цветное гало.
         for (cx, cy, color, letter, bit) in [
-            (330i32, 90i32, XBOX_YELLOW, "Y", XINPUT_GAMEPAD_Y),
-            (306, 114, XBOX_BLUE, "X", XINPUT_GAMEPAD_X),
-            (354, 114, XBOX_RED, "B", XINPUT_GAMEPAD_B),
-            (330, 138, XBOX_GREEN, "A", XINPUT_GAMEPAD_A),
+            (346i32, 105i32, XBOX_YELLOW, "Y", XINPUT_GAMEPAD_Y),
+            (322, 129, XBOX_BLUE, "X", XINPUT_GAMEPAD_X),
+            (370, 129, XBOX_RED, "B", XINPUT_GAMEPAD_B),
+            (346, 153, XBOX_GREEN, "A", XINPUT_GAMEPAD_A),
         ] {
             let pressed = on(bit);
             if pressed {
@@ -1236,56 +1194,15 @@ impl GuiState {
             );
         }
 
-        // Back / Start / Guide.
-        for (x1, bit) in [(212i32, XINPUT_GAMEPAD_BACK), (248, XINPUT_GAMEPAD_START)] {
-            rounded(
-                dc,
-                rect(x1, 102, x1 + 18, 111),
-                self.p(4),
-                if on(bit) { PAD_LIT } else { PAD_CONTROL },
-                PAD_EDGE,
-            );
-        }
-        // Guide-кнопка — настоящий зелёный центр Xbox, без текста «X».
-        if pad.connected {
-            circle(
-                dc,
-                rect(226, 73, 252, 99),
-                rgb(4, 48, 28),
-                rgb(4, 48, 28),
-                self.p(2).max(1),
-            );
-            circle(
-                dc,
-                rect(229, 76, 249, 96),
-                XBOX_GREEN,
-                rgb(8, 95, 53),
-                self.p(2).max(1),
-            );
-            circle(
-                dc,
-                rect(234, 80, 240, 86),
-                rgb(150, 255, 202),
-                rgb(150, 255, 202),
-                1,
-            );
-        } else {
-            circle(
-                dc,
-                rect(229, 76, 249, 96),
-                PAD_DARK,
-                PAD_CONTROL,
-                self.p(2).max(1),
-            );
-        }
+        // Только основные органы управления: без Back/Start/Guide.
 
-        // Стики.
+        // Стики — расположение как на джойстике: левый выше, правый ниже.
         let dz = self.deadzone_pct as f64 / 100.0;
         self.draw_stick(
             dc,
             &rect,
-            184,
-            154,
+            150,
+            98,
             pad.lx,
             pad.ly,
             on(XINPUT_GAMEPAD_LEFT_THUMB),
@@ -1294,8 +1211,8 @@ impl GuiState {
         self.draw_stick(
             dc,
             &rect,
-            276,
-            166,
+            280,
+            170,
             pad.rx,
             pad.ry,
             on(XINPUT_GAMEPAD_RIGHT_THUMB),
@@ -1377,18 +1294,6 @@ impl GuiState {
                 1,
             );
         }
-    }
-
-    unsafe fn pad_label(&self, dc: HDC, rect: RECT, label: &str) {
-        let mut rect = rect;
-        draw_text(
-            dc,
-            label,
-            &mut rect,
-            self.fonts.small,
-            rgb(182, 194, 214),
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
     }
 
     unsafe fn paint_button(&self, item: &DRAWITEMSTRUCT) {

@@ -33,7 +33,6 @@ pub const SLATE: u32 = rgb(71, 85, 105);
 pub const SLATE_SOFT: u32 = rgb(51, 65, 85);
 
 // Палитра «геймпада» для визуализации (dark-theme variant).
-pub const PAD_BODY: u32 = rgb(30, 42, 68);
 pub const PAD_EDGE: u32 = rgb(10, 17, 31);
 pub const PAD_DARK: u32 = rgb(8, 14, 27);
 pub const PAD_CONTROL: u32 = rgb(52, 68, 96);
@@ -205,43 +204,6 @@ pub unsafe fn ring(dc: HDC, rect: RECT, color: u32, width: i32) {
     SelectObject(dc, old_brush);
     SelectObject(dc, old_pen);
     DeleteObject(pen);
-}
-
-/// Часть составного силуэта (региона).
-pub enum Shape {
-    Round(RECT, i32),
-}
-
-/// Силуэт из объединения нескольких фигур: одна заливка + общая рамка.
-/// Используется для корпуса геймпада (прямоугольник + две рукоятки).
-pub unsafe fn silhouette(dc: HDC, shapes: &[Shape], color: u32, border: u32, border_width: i32) {
-    let Some((first, rest)) = shapes.split_first() else {
-        return;
-    };
-    let region: HRGN = match first {
-        Shape::Round(r, rad) => CreateRoundRectRgn(r.left, r.top, r.right, r.bottom, *rad, *rad),
-    };
-    if region.is_null() {
-        return;
-    }
-    for shape in rest {
-        let part = match shape {
-            Shape::Round(r, rad) => {
-                CreateRoundRectRgn(r.left, r.top, r.right, r.bottom, *rad, *rad)
-            }
-        };
-        if !part.is_null() {
-            CombineRgn(region, region, part, RGN_OR);
-            DeleteObject(part);
-        }
-    }
-    let brush = CreateSolidBrush(color);
-    FillRgn(dc, region, brush);
-    DeleteObject(brush);
-    let frame_brush = CreateSolidBrush(border);
-    FrameRgn(dc, region, frame_brush, border_width, border_width);
-    DeleteObject(frame_brush);
-    DeleteObject(region);
 }
 
 pub unsafe fn draw_text(dc: HDC, text: &str, rect: &mut RECT, font: HFONT, color: u32, flags: u32) {
