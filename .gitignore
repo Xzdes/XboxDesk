@@ -1,0 +1,28 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+*.lib
+*.res
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-local
+.dsh-project-memory/
+*.ini
+
+# Release binaries (optional: uncomment to keep out of repo)
+# target/release/XboxDesk.exe

@@ -1,0 +1,8 @@
+# Статически линкуем MSVC-рантайм, чтобы exe был по-настоящему переносимым
+# (тот же подход, что в alibi-quic/.cargo/config.toml).
+#
+# Без этого exe импортирует VCRUNTIME140.dll из VC++ Redistributable, и на
+# чистой машине «просто запусти» заканчивается диалогом о недостающей DLL.
+# Здесь из внешнего остаются только системные DLL Windows.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

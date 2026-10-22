@@ -1,0 +1,3 @@
+// Ресурсы XboxDesk: иконка приложения (ID 1) и манифест (ID 1, тип 24).
+1 ICON "xboxdesk.ico"
+1 24 "xboxdesk.manifest"
