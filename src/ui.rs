@@ -33,22 +33,19 @@ pub const SLATE: u32 = rgb(71, 85, 105);
 pub const SLATE_SOFT: u32 = rgb(51, 65, 85);
 
 // Палитра «геймпада» для визуализации (dark-theme variant).
-pub const PAD_BODY: u32 = rgb(24, 34, 56);
-pub const PAD_EDGE: u32 = rgb(14, 22, 40);
-pub const PAD_DARK: u32 = rgb(10, 16, 30);
-pub const PAD_CONTROL: u32 = rgb(38, 52, 78);
-pub const PAD_LIT: u32 = rgb(96, 165, 250);
-pub const PAD_KNOB: u32 = rgb(148, 163, 184);
-pub const XBOX_GREEN: u32 = rgb(74, 222, 128);
-pub const XBOX_RED: u32 = rgb(244, 67, 54);
-pub const XBOX_BLUE: u32 = rgb(96, 165, 250);
+pub const PAD_BODY: u32 = rgb(30, 42, 68);
+pub const PAD_EDGE: u32 = rgb(10, 17, 31);
+pub const PAD_DARK: u32 = rgb(8, 14, 27);
+pub const PAD_CONTROL: u32 = rgb(52, 68, 96);
+pub const PAD_LIT: u32 = rgb(0, 120, 215);
+pub const PAD_KNOB: u32 = rgb(180, 182, 190);
+pub const XBOX_GREEN: u32 = rgb(16, 186, 106);
+pub const XBOX_RED: u32 = rgb(230, 40, 40);
+pub const XBOX_BLUE: u32 = rgb(0, 120, 215);
 pub const XBOX_YELLOW: u32 = rgb(255, 193, 7);
 
 // PlayStation-style UI accents
 pub const FOCUS_RING: u32 = rgb(96, 165, 250); // bright blue focus ring
-pub const CURSOR_DOT: u32 = rgb(255, 255, 255); // cursor center dot
-pub const CURSOR_RING: u32 = rgb(96, 165, 250); // cursor outer ring
-
 pub const APP_TITLE: &str = "XboxDesk";
 
 pub fn wide(value: &str) -> Vec<u16> {
@@ -213,7 +210,6 @@ pub unsafe fn ring(dc: HDC, rect: RECT, color: u32, width: i32) {
 /// Часть составного силуэта (региона).
 pub enum Shape {
     Round(RECT, i32),
-    Ellipse(RECT),
 }
 
 /// Силуэт из объединения нескольких фигур: одна заливка + общая рамка.
@@ -224,7 +220,6 @@ pub unsafe fn silhouette(dc: HDC, shapes: &[Shape], color: u32, border: u32, bor
     };
     let region: HRGN = match first {
         Shape::Round(r, rad) => CreateRoundRectRgn(r.left, r.top, r.right, r.bottom, *rad, *rad),
-        Shape::Ellipse(r) => CreateEllipticRgn(r.left, r.top, r.right, r.bottom),
     };
     if region.is_null() {
         return;
@@ -234,7 +229,6 @@ pub unsafe fn silhouette(dc: HDC, shapes: &[Shape], color: u32, border: u32, bor
             Shape::Round(r, rad) => {
                 CreateRoundRectRgn(r.left, r.top, r.right, r.bottom, *rad, *rad)
             }
-            Shape::Ellipse(r) => CreateEllipticRgn(r.left, r.top, r.right, r.bottom),
         };
         if !part.is_null() {
             CombineRgn(region, region, part, RGN_OR);

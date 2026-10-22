@@ -12,9 +12,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 use windows_sys::Win32::UI::Controls::*;
 use windows_sys::Win32::UI::HiDpi::*;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    EnableWindow, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
-};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::binding::{default_bindings, Binding, GameButton};
@@ -221,28 +219,6 @@ unsafe extern "system" fn wnd_proc(
             }
             0
         }
-        WM_MOUSEMOVE => {
-            if let Some(state) = state_ptr.as_mut() {
-                // A quiet, console-like cursor: a dot surrounded by a focus ring.
-                state.cursor_x = (lparam as i16) as i32;
-                state.cursor_y = ((lparam >> 16) as i16) as i32;
-                state.cursor_visible = true;
-                let mut track: TRACKMOUSEEVENT = std::mem::zeroed();
-                track.cbSize = std::mem::size_of::<TRACKMOUSEEVENT>() as u32;
-                track.dwFlags = TME_LEAVE;
-                track.hwndTrack = hwnd;
-                TrackMouseEvent(&mut track);
-                InvalidateRect(hwnd, std::ptr::null(), 0);
-            }
-            0
-        }
-        WM_MOUSELEAVE => {
-            if let Some(state) = state_ptr.as_mut() {
-                state.cursor_visible = false;
-                InvalidateRect(hwnd, std::ptr::null(), 0);
-            }
-            0
-        }
         WM_ERASEBKGND => 1,
         WM_PAINT => {
             if let Some(state) = state_ptr.as_ref() {
@@ -314,11 +290,6 @@ struct GuiState {
     deadzone_pct: u32,
     rows: Vec<ListRow>,
     last_toggle_label: String,
-    // Client-space cursor overlay state. The native arrow remains available,
-    // while this ring gives the pointer a modern console focus affordance.
-    cursor_x: i32,
-    cursor_y: i32,
-    cursor_visible: bool,
 }
 
 /// Строка списка привязок: цветная фишка кнопки + текст + отметка вибрации.
@@ -370,9 +341,6 @@ impl GuiState {
             deadzone_pct: 15,
             rows: Vec::new(),
             last_toggle_label: String::new(),
-            cursor_x: 0,
-            cursor_y: 0,
-            cursor_visible: false,
         }
     }
 
@@ -918,10 +886,10 @@ impl GuiState {
         section_header(dc, "Геймпад", pad, &self.fonts, self.dpi, XBOX_GREEN);
         self.draw_battery(dc, pad);
         let viz = RECT {
-            left: pad.left + self.p(20),
-            top: pad.top + self.p(44),
-            right: pad.right - self.p(20),
-            bottom: pad.bottom - self.p(20),
+            left: pad.left + self.p(18),
+            top: pad.top + self.p(38),
+            right: pad.right - self.p(18),
+            bottom: pad.bottom - self.p(18),
         };
         self.draw_pad(dc, viz);
 
@@ -945,33 +913,6 @@ impl GuiState {
         // ── Журнал ──
         card(dc, journal, self.p(14), self.p(3));
         section_header(dc, "Журнал", journal, &self.fonts, self.dpi, SLATE);
-
-        // PlayStation-inspired cursor: nested solid rings keep it visible on
-        // both dark panels and text-heavy areas without alpha compositing.
-        if self.cursor_visible {
-            let r = self.p(12).max(8);
-            let outer = RECT {
-                left: self.cursor_x - r,
-                top: self.cursor_y - r,
-                right: self.cursor_x + r,
-                bottom: self.cursor_y + r,
-            };
-            ring(dc, outer, rgb(8, 12, 24), self.p(4).max(2));
-            ring(dc, outer, CURSOR_RING, self.p(2).max(1));
-            let dot = self.p(3).max(2);
-            circle(
-                dc,
-                RECT {
-                    left: self.cursor_x - dot,
-                    top: self.cursor_y - dot,
-                    right: self.cursor_x + dot,
-                    bottom: self.cursor_y + dot,
-                },
-                CURSOR_DOT,
-                CURSOR_DOT,
-                1,
-            );
-        }
     }
 
     /// Индикатор батареи в шапке карточки геймпада: иконка + проценты.
@@ -1085,20 +1026,40 @@ impl GuiState {
         let pad = self.pad;
         let on = |bit: u16| pad.connected && pad.buttons & bit != 0;
 
-        // Корпус: две рукоятки + средняя часть одним силуэтом.
+        // Корпус: чистый симметричный силуэт с отдельной верхней декой.
+        // Две округлые рукоятки и широкая центральная часть читаются
+        // заметно лучше, чем один монолитный «blob».
         silhouette(
             dc,
             &[
-                Shape::Ellipse(rect(25, 120, 160, 272)),
-                Shape::Ellipse(rect(300, 120, 435, 272)),
-                Shape::Round(rect(55, 72, 405, 196), self.p(48)),
+                // Широкая верхняя дека и две мягко расширяющиеся рукоятки.
+                Shape::Round(rect(54, 46, 406, 218), self.p(54)),
+                Shape::Round(rect(28, 112, 160, 284), self.p(48)),
+                Shape::Round(rect(300, 112, 432, 284), self.p(48)),
+                Shape::Round(rect(78, 174, 382, 246), self.p(28)),
+                Shape::Round(rect(92, 28, 368, 96), self.p(30)),
             ],
             PAD_BODY,
             PAD_EDGE,
-            self.p(2).max(1),
+            self.p(3).max(1),
         );
+        // Центральная «лицевая панель» в форме мягкого щита — характерная
+        // посадка элементов Xbox, без плоской чёрной полосы.
+        rounded(
+            dc,
+            rect(102, 74, 358, 126),
+            self.p(24),
+            PAD_DARK,
+            PAD_CONTROL,
+        );
+        rounded(dc, rect(116, 84, 344, 113), self.p(14), PAD_BODY, PAD_BODY);
+        // Плечевые швы и затемнённая «талия» делают профиль читаемым.
+        rounded(dc, rect(92, 96, 116, 176), self.p(10), PAD_DARK, PAD_DARK);
+        rounded(dc, rect(344, 96, 368, 176), self.p(10), PAD_DARK, PAD_DARK);
+        // Нижняя перемычка корпуса подчёркивает две рукоятки.
+        rounded(dc, rect(100, 184, 360, 222), self.p(18), PAD_BODY, PAD_EDGE);
 
-        // Триггеры: вертикальные индикаторы-полоски.
+        // Триггеры: верхние гнёзда с аккуратными индикаторами.
         for (x1, value, lit) in [
             (105i32, pad.lt, pad.connected && pad.lt >= 128),
             (335, pad.rt, pad.connected && pad.rt >= 128),
@@ -1129,50 +1090,124 @@ impl GuiState {
         ] {
             rounded(
                 dc,
-                rect(x1, 60, x1 + 80, 76),
-                self.p(8),
+                rect(x1, 59, x1 + 74, 73),
+                self.p(6),
                 if pressed { PAD_LIT } else { PAD_CONTROL },
                 PAD_EDGE,
             );
-            self.pad_label(dc, rect(x1, 60, x1 + 80, 76), label);
+            self.pad_label(dc, rect(x1, 59, x1 + 74, 73), label);
         }
 
-        // Крестовина.
+        // Крестовина — цельный выемчатый крест, как на Switch Pro:
+        // вертикальная и горизонтальная ручки с общим центром.
         let cross_color = PAD_CONTROL;
+        let dpad_cx = 138;
+        let dpad_cy = 170;
+        let arm_w = 18;
+        let arm_len = 34;
+        let center_r = 8;
+        // Вертикальная ручка.
         rounded(
             dc,
-            rect(186, 142, 204, 194),
+            rect(
+                dpad_cx - arm_w / 2,
+                dpad_cy - arm_len - center_r,
+                dpad_cx + arm_w / 2,
+                dpad_cy + arm_len + center_r,
+            ),
             self.p(5),
             cross_color,
             PAD_EDGE,
         );
+        // Горизонтальная ручка.
         rounded(
             dc,
-            rect(169, 159, 221, 177),
+            rect(
+                dpad_cx - arm_len - center_r,
+                dpad_cy - arm_w / 2,
+                dpad_cx + arm_len + center_r,
+                dpad_cy + arm_w / 2,
+            ),
             self.p(5),
             cross_color,
             PAD_EDGE,
         );
+        // Центральный выемчатый диск.
+        ring(
+            dc,
+            rect(
+                dpad_cx - center_r,
+                dpad_cy - center_r,
+                dpad_cx + center_r,
+                dpad_cy + center_r,
+            ),
+            PAD_DARK,
+            self.p(2).max(1),
+        );
+        // Подсветка нажатого направления — тонкая панель на кончике ручки.
         if on(XINPUT_GAMEPAD_DPAD_UP) {
-            rounded(dc, rect(186, 142, 204, 170), self.p(5), PAD_LIT, PAD_LIT);
+            rounded(
+                dc,
+                rect(
+                    dpad_cx - arm_w / 2 + 2,
+                    dpad_cy - arm_len - center_r + 2,
+                    dpad_cx + arm_w / 2 - 2,
+                    dpad_cy - center_r - 2,
+                ),
+                self.p(3),
+                PAD_LIT,
+                PAD_LIT,
+            );
         }
         if on(XINPUT_GAMEPAD_DPAD_DOWN) {
-            rounded(dc, rect(186, 166, 204, 194), self.p(5), PAD_LIT, PAD_LIT);
+            rounded(
+                dc,
+                rect(
+                    dpad_cx - arm_w / 2 + 2,
+                    dpad_cy + center_r + 2,
+                    dpad_cx + arm_w / 2 - 2,
+                    dpad_cy + arm_len + center_r - 2,
+                ),
+                self.p(3),
+                PAD_LIT,
+                PAD_LIT,
+            );
         }
         if on(XINPUT_GAMEPAD_DPAD_LEFT) {
-            rounded(dc, rect(169, 159, 197, 177), self.p(5), PAD_LIT, PAD_LIT);
+            rounded(
+                dc,
+                rect(
+                    dpad_cx - arm_len - center_r + 2,
+                    dpad_cy - arm_w / 2 + 2,
+                    dpad_cx - center_r - 2,
+                    dpad_cy + arm_w / 2 - 2,
+                ),
+                self.p(3),
+                PAD_LIT,
+                PAD_LIT,
+            );
         }
         if on(XINPUT_GAMEPAD_DPAD_RIGHT) {
-            rounded(dc, rect(193, 159, 221, 177), self.p(5), PAD_LIT, PAD_LIT);
+            rounded(
+                dc,
+                rect(
+                    dpad_cx + center_r + 2,
+                    dpad_cy - arm_w / 2 + 2,
+                    dpad_cx + arm_len + center_r - 2,
+                    dpad_cy + arm_w / 2 - 2,
+                ),
+                self.p(3),
+                PAD_LIT,
+                PAD_LIT,
+            );
         }
-        rounded(dc, rect(190, 163, 200, 173), self.p(2), PAD_DARK, PAD_DARK);
 
         // Кнопки ABXY в цветах Xbox; при нажатии — цветное гало.
         for (cx, cy, color, letter, bit) in [
-            (330i32, 94i32, XBOX_YELLOW, "Y", XINPUT_GAMEPAD_Y),
-            (306, 118, XBOX_BLUE, "X", XINPUT_GAMEPAD_X),
-            (354, 118, XBOX_RED, "B", XINPUT_GAMEPAD_B),
-            (330, 142, XBOX_GREEN, "A", XINPUT_GAMEPAD_A),
+            (330i32, 90i32, XBOX_YELLOW, "Y", XINPUT_GAMEPAD_Y),
+            (306, 114, XBOX_BLUE, "X", XINPUT_GAMEPAD_X),
+            (354, 114, XBOX_RED, "B", XINPUT_GAMEPAD_B),
+            (330, 138, XBOX_GREEN, "A", XINPUT_GAMEPAD_A),
         ] {
             let pressed = on(bit);
             if pressed {
@@ -1211,31 +1246,46 @@ impl GuiState {
                 PAD_EDGE,
             );
         }
-        // Guide-кнопка светится зеленым, когда контроллер на связи.
-        circle(
-            dc,
-            rect(231, 78, 247, 94),
-            if pad.connected { XBOX_GREEN } else { PAD_DARK },
-            PAD_CONTROL,
-            self.p(2).max(1),
-        );
-        let mut guide_rect = rect(231, 78, 247, 94);
-        draw_text(
-            dc,
-            "X",
-            &mut guide_rect,
-            self.fonts.small,
-            if pad.connected { WHITE } else { PAD_KNOB },
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
+        // Guide-кнопка — настоящий зелёный центр Xbox, без текста «X».
+        if pad.connected {
+            circle(
+                dc,
+                rect(226, 73, 252, 99),
+                rgb(4, 48, 28),
+                rgb(4, 48, 28),
+                self.p(2).max(1),
+            );
+            circle(
+                dc,
+                rect(229, 76, 249, 96),
+                XBOX_GREEN,
+                rgb(8, 95, 53),
+                self.p(2).max(1),
+            );
+            circle(
+                dc,
+                rect(234, 80, 240, 86),
+                rgb(150, 255, 202),
+                rgb(150, 255, 202),
+                1,
+            );
+        } else {
+            circle(
+                dc,
+                rect(229, 76, 249, 96),
+                PAD_DARK,
+                PAD_CONTROL,
+                self.p(2).max(1),
+            );
+        }
 
         // Стики.
         let dz = self.deadzone_pct as f64 / 100.0;
         self.draw_stick(
             dc,
             &rect,
-            135,
-            124,
+            184,
+            154,
             pad.lx,
             pad.ly,
             on(XINPUT_GAMEPAD_LEFT_THUMB),
@@ -1244,8 +1294,8 @@ impl GuiState {
         self.draw_stick(
             dc,
             &rect,
-            272,
-            168,
+            276,
+            166,
             pad.rx,
             pad.ry,
             on(XINPUT_GAMEPAD_RIGHT_THUMB),
@@ -1254,7 +1304,7 @@ impl GuiState {
 
         // Нет соединения — плашка поверх.
         if !pad.connected {
-            let pill = rect(118, 126, 342, 158);
+            let pill = rect(125, 214, 335, 243);
             rounded(dc, pill, self.p(16), WHITE, RED);
             let mut text_rect = pill;
             draw_text(
@@ -1280,12 +1330,20 @@ impl GuiState {
         pressed: bool,
         deadzone: f64,
     ) {
+        // Вогнутая чаша стика: внешний обод + более тёмное дно.
         circle(
             dc,
-            rect(cx - 21, cy - 21, cx + 21, cy + 21),
-            PAD_DARK,
+            rect(cx - 23, cy - 23, cx + 23, cy + 23),
+            PAD_EDGE,
             PAD_CONTROL,
             self.p(2).max(1),
+        );
+        circle(
+            dc,
+            rect(cx - 19, cy - 19, cx + 19, cy + 19),
+            PAD_DARK,
+            PAD_DARK,
+            self.p(1).max(1),
         );
         let dz_radius = (21.0 * deadzone.min(0.95)) as i32;
         if dz_radius > 2 {
@@ -1301,15 +1359,24 @@ impl GuiState {
                 self.p(1).max(1),
             );
         }
-        let knob_x = cx + (x * 12.0) as i32;
-        let knob_y = cy - (y * 12.0) as i32;
+        let knob_x = cx + (x.clamp(-1.0, 1.0) * 11.0) as i32;
+        let knob_y = cy - (y.clamp(-1.0, 1.0) * 11.0) as i32;
         circle(
             dc,
-            rect(knob_x - 12, knob_y - 12, knob_x + 12, knob_y + 12),
+            rect(knob_x - 10, knob_y - 10, knob_x + 10, knob_y + 10),
             if pressed { PAD_LIT } else { PAD_KNOB },
             PAD_EDGE,
-            self.p(1).max(1),
+            self.p(2).max(1),
         );
+        if !pressed {
+            circle(
+                dc,
+                rect(knob_x - 3, knob_y - 5, knob_x + 1, knob_y - 1),
+                rgb(225, 230, 240),
+                rgb(225, 230, 240),
+                1,
+            );
+        }
     }
 
     unsafe fn pad_label(&self, dc: HDC, rect: RECT, label: &str) {
